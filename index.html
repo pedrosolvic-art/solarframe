@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>SolarFrame</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --orange: #FF5A1F;
+    --gold: #FFB347;
+    --white: #F5F0E8;
+    --dark: #0A0805;
+    --panel: rgba(10,8,5,0.82);
+    --border: rgba(255,90,31,0.25);
+    --mono: 'DM Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--dark);
+    color: var(--white);
+    font-family: var(--mono);
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* ── CAMERA LAYER ── */
+  #camera-video {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    z-index: 0;
+  }
+
+  /* ── AR CANVAS ── */
+  #ar-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* ── CROSSHAIR CENTER ── */
+  #crosshair {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    pointer-events: none;
+    width: 40px; height: 40px;
+  }
+  #crosshair::before, #crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255,90,31,0.6);
+  }
+  #crosshair::before { width: 1px; height: 100%; left: 50%; top: 0; }
+  #crosshair::after  { width: 100%; height: 1px; top: 50%; left: 0; }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: env(safe-area-inset-top, 44px) 16px 12px;
+    background: linear-gradient(to bottom, rgba(10,8,5,0.9), transparent);
+  }
+  #topbar .logo {
+    font-family: var(--display);
+    font-size: 26px;
+    letter-spacing: 2px;
+    color: var(--orange);
+  }
+  #sun-time-display {
+    font-size: 11px;
+    color: var(--gold);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  /* ── COMPASS BAR ── */
+  #compass-bar {
+    position: fixed; top: calc(env(safe-area-inset-top, 44px) + 56px);
+    left: 0; right: 0;
+    z-index: 10;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: rgba(245,240,232,0.4);
+    pointer-events: none;
+  }
+  #compass-val {
+    color: var(--orange);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* ── BOTTOM PANEL ── */
+  #bottom-panel {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    background: var(--panel);
+    border-top: 0.5px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 14px 16px calc(env(safe-area-inset-bottom, 20px) + 14px);
+  }
+
+  .sliders { display: flex; flex-direction: column; gap: 10px; }
+
+  .slider-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .slider-label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: rgba(245,240,232,0.45);
+    min-width: 72px;
+    text-transform: uppercase;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 2px;
+    background: rgba(255,90,31,0.2);
+    border-radius: 1px;
+    outline: none;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--orange);
+    border: 2px solid var(--dark);
+    cursor: pointer;
+  }
+  .slider-val {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--white);
+    min-width: 52px;
+    text-align: right;
+  }
+
+  .stats-row {
+    display: flex; gap: 0;
+    margin-bottom: 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .stat-cell {
+    flex: 1;
+    padding: 8px 10px;
+    border-right: 0.5px solid var(--border);
+    text-align: center;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-cell .sv { font-size: 14px; font-weight: 500; color: var(--orange); font-family: var(--display); letter-spacing: 1px; }
+  .stat-cell .sl { font-size: 9px; color: rgba(245,240,232,0.4); letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+
+  /* ── PERMISSION SCREEN ── */
+  #permission-screen {
+    position: fixed; inset: 0;
+    z-index: 100;
+    background: var(--dark);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 32px;
+    text-align: center;
+    gap: 20px;
+  }
+  #permission-screen .big { font-family: var(--display); font-size: 52px; color: var(--orange); line-height: 1; letter-spacing: 3px; }
+  #permission-screen .desc { font-size: 12px; color: rgba(245,240,232,0.5); line-height: 1.8; letter-spacing: 0.5px; max-width: 280px; }
+  #start-btn {
+    margin-top: 12px;
+    background: var(--orange);
+    color: var(--dark);
+    border: none;
+    font-family: var(--display);
+    font-size: 20px;
+    letter-spacing: 3px;
+    padding: 14px 40px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    max-width: 300px;
+  }
+  #start-btn:active { opacity: 0.8; }
+  .perm-icon { font-size: 48px; margin-bottom: 4px; }
+
+  /* ── NO COMPASS WARNING ── */
+  #no-compass {
+    display: none;
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    background: var(--panel);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 11px;
+    color: var(--gold);
+    text-align: center;
+    max-width: 260px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* ── MODE TOGGLE ── */
+  #mode-toggle {
+    position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 20px) + 220px);
+    z-index: 15;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .mode-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 0.5px solid var(--border);
+    color: rgba(245,240,232,0.5);
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s;
+  }
+  .mode-btn.active { background: var(--orange); color: var(--dark); border-color: var(--orange); }
+  .mode-btn:active { transform: scale(0.92); }
+</style>
+</head>
+<body>
+
+<!-- Permission screen -->
+<div id="permission-screen">
+  <div class="perm-icon">☀️</div>
+  <div class="big">SOLAR<br>FRAME</div>
+  <div class="desc">Simulador AR de fotografia solar.<br>Visualize o sol na lente certa, na hora certa, no lugar certo.</div>
+  <div class="desc" style="color:rgba(255,90,31,0.7)">Necessário: câmera, GPS e bússola</div>
+  <button id="start-btn" onclick="initApp()">INICIAR</button>
+</div>
+
+<!-- Camera feed -->
+<video id="camera-video" autoplay playsinline muted></video>
+
+<!-- AR overlay -->
+<canvas id="ar-canvas"></canvas>
+
+<!-- Crosshair -->
+<div id="crosshair"></div>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div class="logo">SOLARFRAME</div>
+  <div id="sun-time-display">
+    <div id="sun-azimuth">AZ —°</div>
+    <div id="sun-altitude">ALT —°</div>
+  </div>
+</div>
+
+<!-- Compass -->
+<div id="compass-bar">
+  <span id="compass-val">—°</span> &nbsp;|&nbsp; apontando
+</div>
+
+<!-- No compass warning -->
+<div id="no-compass">Bússola não disponível.<br>O sol será exibido fixo no centro.</div>
+
+<!-- Mode buttons -->
+<div id="mode-toggle">
+  <div class="mode-btn active" id="btn-surfer" onclick="toggleSurfer()" title="Surfista">🏄</div>
+  <div class="mode-btn" id="btn-grid" onclick="toggleGrid()" title="Grade">⊞</div>
+</div>
+
+<!-- Bottom panel -->
+<div id="bottom-panel">
+  <div class="stats-row">
+    <div class="stat-cell"><div class="sv" id="stat-sun">—%</div><div class="sl">sol/frame</div></div>
+    <div class="stat-cell"><div class="sv" id="stat-dist">1200m</div><div class="sl">distância</div></div>
+    <div class="stat-cell"><div class="sv" id="stat-surfer">—px</div><div class="sl">surfista</div></div>
+    <div class="stat-cell"><div class="sv" id="stat-time">—</div><div class="sl">fator sol</div></div>
+  </div>
+  <div class="sliders">
+    <div class="slider-row">
+      <span class="slider-label">Lente</span>
+      <input type="range" id="sl-mm" min="200" max="800" step="1" value="800">
+      <span class="slider-val"><span id="v-mm">800</span>mm</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Distância</span>
+      <input type="range" id="sl-dist" min="50" max="3000" step="10" value="1200">
+      <span class="slider-val"><span id="v-dist">1200</span>m</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Altura</span>
+      <input type="range" id="sl-height" min="30" max="300" step="1" value="160">
+      <span class="slider-val"><span id="v-height">160</span>cm</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──
+const SENSOR_H    = 4000;
+const SUN_BASE_PX = SENSOR_H * 0.31;   // 1240px a 800mm meio-dia
+const REF_MM      = 800;
+const REF_DIST    = 1200;
+const REF_PERSON  = 100;
+const REF_HEIGHT  = 160;
+
+// ── STATE ──
+let lat = null, lon = null;
+let deviceHeading = null;   // bússola: graus de norte (0-360)
+let deviceTilt    = 0;      // inclinação vertical do telefone
+let hasCompass    = false;
+let showSurfer    = true;
+let showGrid      = false;
+let personOffsetY = 0;
+let isDragging    = false;
+let dragStartY    = 0;
+let dragStartOff  = 0;
+let animFrame     = null;
+let lastSunPos    = { x: 0.5, y: 0.5 }; // 0-1 normalizado no canvas
+
+const canvas  = document.getElementById('ar-canvas');
+const ctx     = canvas.getContext('2d');
+const video   = document.getElementById('camera-video');
+
+// ── INIT ──
+async function initApp() {
+  document.getElementById('permission-screen').style.display = 'none';
+
+  // Câmera (traseira)
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    video.srcObject = stream;
+  } catch(e) {
+    // fallback sem exact
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      video.srcObject = stream;
+    } catch(e2) { console.warn('Camera error', e2); }
+  }
+
+  // GPS
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(pos => {
+      lat = pos.coords.latitude;
+      lon = pos.coords.longitude;
+    }, null, { enableHighAccuracy: true });
+  }
+
+  // Bússola + tilt (iOS precisa de permissão explícita)
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const perm = await DeviceOrientationEvent.requestPermission();
+      if (perm === 'granted') setupOrientation();
+    } catch(e) { setupOrientation(); }
+  } else {
+    setupOrientation();
+  }
+
+  // Resize canvas
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Touch drag na silhueta
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchmove',  onTouchMove,  { passive: false });
+  canvas.addEventListener('touchend',   onTouchEnd);
+
+  // Sliders
+  ['sl-mm','sl-dist','sl-height'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateSliderLabels);
+  });
+  updateSliderLabels();
+
+  // Loop
+  loop();
+}
+
+function setupOrientation() {
+  window.addEventListener('deviceorientation', e => {
+    // webkitCompassHeading = graus de norte, iOS
+    if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
+      deviceHeading = e.webkitCompassHeading;
+      hasCompass = true;
+    } else if (e.alpha !== null) {
+      deviceHeading = (360 - e.alpha) % 360;
+      hasCompass = true;
+    }
+    // Beta: inclinação vertical (0=horizontal, 90=apontando para cima)
+    if (e.beta !== null) deviceTilt = e.beta;
+  }, true);
+
+  setTimeout(() => {
+    if (!hasCompass) document.getElementById('no-compass').style.display = 'block';
+  }, 3000);
+}
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+// ── SOLAR CALCULATION (Jean Meeus simplified) ──
+function toRad(d) { return d * Math.PI / 180; }
+function toDeg(r) { return r * 180 / Math.PI; }
+
+function getSunPosition(date, latitude, longitude) {
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const n  = JD - 2451545.0;
+  const L  = (280.460 + 0.9856474 * n) % 360;
+  const g  = toRad((357.528 + 0.9856003 * n) % 360);
+  const lambda = toRad(L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2*g));
+  const epsilon = toRad(23.439 - 0.0000004 * n);
+
+  const sinDec = Math.sin(epsilon) * Math.sin(lambda);
+  const dec    = Math.asin(sinDec);
+  const cosDec = Math.cos(dec);
+
+  // Hour angle
+  const UT  = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+  const GMST = (6.697375 + 0.0657098242 * n + UT) % 24;
+  const LMST = (GMST + longitude/15) % 24;
+  const HA   = toRad((LMST - toDeg(Math.asin(Math.sin(lambda)*Math.cos(epsilon)))/15) * 15);
+
+  const latR = toRad(latitude);
+  const sinAlt = Math.sin(latR)*sinDec + Math.cos(latR)*cosDec*Math.cos(HA);
+  const altitude = toDeg(Math.asin(sinAlt));
+
+  const cosAz = (sinDec - Math.sin(latR)*sinAlt) / (Math.cos(latR)*Math.cos(Math.asin(sinAlt)));
+  let azimuth = toDeg(Math.acos(Math.max(-1, Math.min(1, cosAz))));
+  if (Math.sin(HA) > 0) azimuth = 360 - azimuth;
+
+  return { altitude, azimuth };
+}
+
+// ── SOLAR TIME FACTOR (para tamanho do sol) ──
+function getSunTimeFactor(altitude) {
+  // altitude 90° (zênite) = fator 1.0; altitude 0° (horizonte) = fator 1.5
+  const t = 1 - Math.max(0, Math.min(90, altitude)) / 90;
+  return 1.0 + 0.5 * t;
+}
+
+function getSunColor(altitude) {
+  // altitude 90 → branco-amarelo; altitude 0 → laranja-vermelho
+  const t = 1 - Math.max(0, Math.min(90, altitude)) / 90;
+  if (t < 0.5) return lerpColor([255,248,200],[255,204,68], t*2);
+  return lerpColor([255,204,68],[255,85,0], (t-0.5)*2);
+}
+function getHaloColor(altitude) {
+  const t = 1 - Math.max(0, Math.min(90, altitude)) / 90;
+  if (t < 0.5) return lerpColor([255,224,96],[255,128,16], t*2);
+  return lerpColor([255,128,16],[187,24,0], (t-0.5)*2);
+}
+
+function lerpColor(a, b, t) {
+  return [Math.round(a[0]+(b[0]-a[0])*t), Math.round(a[1]+(b[1]-a[1])*t), Math.round(a[2]+(b[2]-a[2])*t)];
+}
+function rgbStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+// ── SUN SCREEN POSITION ──
+// Mapeia azimute+altitude do sol em coordenadas de tela
+// baseado na direção que o telefone está apontando
+function getSunScreenPos(sunAz, sunAlt) {
+  if (!hasCompass) return { x: 0.5, y: 0.5, visible: true };
+
+  // diferença angular horizontal (azimute do sol - azimute do telefone)
+  let dAz = sunAz - deviceHeading;
+  if (dAz > 180)  dAz -= 360;
+  if (dAz < -180) dAz += 360;
+
+  // diferença angular vertical (altitude do sol - inclinação do telefone)
+  const phonePitch = Math.max(-90, Math.min(90, deviceTilt - 90)); // 0=apontado p/ horizonte
+  let dAlt = sunAlt - phonePitch;
+
+  // FOV da câmera traseira do iPhone ≈ 65° horizontal, 50° vertical
+  const fovH = 65, fovV = 50;
+
+  const x = 0.5 + dAz  / fovH;
+  const y = 0.5 - dAlt / fovV;
+
+  // visível se dentro ou perto do frame
+  const visible = x > -0.3 && x < 1.3 && y > -0.3 && y < 1.3;
+  return { x, y, visible };
+}
+
+// ── DRAW ──
+function draw(sunPos, sunAlt) {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const mm     = parseInt(document.getElementById('sl-mm').value);
+  const distM  = parseInt(document.getElementById('sl-dist').value);
+  const hCm    = parseInt(document.getElementById('sl-height').value);
+
+  // Tamanho do sol
+  const timeFactor  = getSunTimeFactor(sunAlt);
+  const sunSensorPx = SUN_BASE_PX * (mm / REF_MM) * timeFactor;
+  const scaleY      = H / SENSOR_H;
+  const sunCanvasR  = (sunSensorPx * scaleY) / 2;
+
+  const sunX = sunPos.x * W;
+  const sunY = sunPos.y * H;
+
+  // Cor baseada na altitude real
+  const sunRgb  = getSunColor(sunAlt);
+  const haloRgb = getHaloColor(sunAlt);
+  const haloSize = 1.7 + 0.9 * (1 - Math.max(0, Math.min(90, sunAlt)) / 90);
+
+  // HALO
+  const g1 = ctx.createRadialGradient(sunX, sunY, sunCanvasR*0.4, sunX, sunY, sunCanvasR*haloSize);
+  g1.addColorStop(0,    rgbStr(haloRgb, 0.5));
+  g1.addColorStop(0.45, rgbStr(haloRgb, 0.15));
+  g1.addColorStop(1,    rgbStr(haloRgb, 0));
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunCanvasR*haloSize, 0, Math.PI*2);
+  ctx.fillStyle = g1;
+  ctx.fill();
+
+  // DISCO SOLAR
+  const dg = ctx.createRadialGradient(sunX-sunCanvasR*0.2, sunY-sunCanvasR*0.2, 0, sunX, sunY, sunCanvasR);
+  dg.addColorStop(0,    '#FFFFF0');
+  dg.addColorStop(0.35, rgbStr(sunRgb, 1));
+  dg.addColorStop(1,    rgbStr(haloRgb, 1));
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunCanvasR, 0, Math.PI*2);
+  ctx.fillStyle = dg;
+  ctx.fill();
+
+  // Seta indicadora se sol fora do frame
+  if (!sunPos.visible || sunAlt < 0) {
+    drawSunArrow(sunPos, sunAlt, W, H);
+  }
+
+  // GRADE de terços
+  if (showGrid) {
+    ctx.strokeStyle = 'rgba(245,240,232,0.12)';
+    ctx.lineWidth = 0.5;
+    for (let i=1;i<3;i++) {
+      ctx.beginPath(); ctx.moveTo(W*i/3,0); ctx.lineTo(W*i/3,H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,H*i/3); ctx.lineTo(W,H*i/3); ctx.stroke();
+    }
+  }
+
+  // SURFISTA
+  if (showSurfer) {
+    const personSensorH = REF_PERSON * (mm/REF_MM) * (REF_DIST/distM) * (hCm/REF_HEIGHT);
+    const personCanvasH = personSensorH * scaleY;
+    const pX = W / 2;
+    const pBaseY = H / 2 + personOffsetY * H;
+    drawSurfer(pX, pBaseY, personCanvasH);
+    // armazenar para drag
+    lastSurferBase = pBaseY;
+    lastSurferH    = personCanvasH;
+
+    // stats
+    document.getElementById('stat-surfer').textContent = Math.round(personSensorH)+'px';
+  }
+
+  // STATS
+  const sunPct = (sunSensorPx / SENSOR_H * 100).toFixed(1);
+  document.getElementById('stat-sun').textContent  = sunPct + '%';
+  document.getElementById('stat-dist').textContent = distM + 'm';
+  document.getElementById('stat-time').textContent = 'x' + timeFactor.toFixed(2);
+}
+
+function drawSunArrow(pos, sunAlt, W, H) {
+  if (sunAlt < -10) {
+    // Sol abaixo do horizonte
+    ctx.fillStyle = 'rgba(255,90,31,0.7)';
+    ctx.font = '11px DM Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('☀ sol abaixo do horizonte', W/2, H/2 - 20);
+    return;
+  }
+  // Seta apontando para onde o sol está
+  const cx = W/2, cy = H/2;
+  const tx = pos.x * W, ty = pos.y * H;
+  const angle = Math.atan2(ty - cy, tx - cx);
+  const r = Math.min(W, H) * 0.38;
+  const ax = cx + Math.cos(angle) * r;
+  const ay = cy + Math.sin(angle) * r;
+
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(angle);
+  ctx.fillStyle = 'rgba(255,90,31,0.85)';
+  ctx.beginPath();
+  ctx.moveTo(16, 0); ctx.lineTo(-8, -8); ctx.lineTo(-8, 8);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(255,90,31,0.7)';
+  ctx.font = '10px DM Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('☀', ax, ay - 16);
+}
+
+function drawSurfer(cx, baseY, h) {
+  if (h < 3) return;
+  const s = h / 100;
+  const F = 'rgba(6,3,0,0.93)';
+  ctx.fillStyle = F; ctx.strokeStyle = F;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  const topY = baseY - h;
+  const headR   = s * 7;
+  const headCY  = topY + headR;
+  const headCX  = cx;
+  const neckBot = headCY + headR;
+  const shoulderY = neckBot + s*5;
+  const hipY = shoulderY + s*28, hipX = cx + s*3;
+  const kneeFY=hipY+s*18, kneeFX=hipX-s*5, footFY=kneeFY+s*16, footFX=kneeFX-s*4;
+  const kneeBY=hipY+s*16, kneeBX=hipX+s*7, footBY=kneeBY+s*18, footBX=kneeBX+s*3;
+  const elbowBY=shoulderY+s*16, elbowBX=shoulderY+s*14-shoulderY+shoulderY, handBY=elbowBY+s*10, handBX=cx+s*16;
+  const elbowFY=shoulderY+s*14, elbowFX=cx-s*10, handFY=elbowFY+s*10, handFX=elbowFX-s*4;
+
+  // prancha
+  const boardCX=(handBX+handFX)/2, boardCY=(handBY+handFY)/2+s*2;
+  const bL=s*72, bW=s*4;
+  ctx.save();
+  ctx.translate(boardCX, boardCY);
+  ctx.rotate(-0.10);
+  ctx.beginPath();
+  ctx.moveTo(-bL*0.52,0);
+  ctx.bezierCurveTo(-bL*0.44,-bW*1.1,-bL*0.1,-bW*1.4, bL*0.1,-bW*1.2);
+  ctx.bezierCurveTo( bL*0.35,-bW*0.9, bL*0.52,-bW*0.5, bL*0.52,0);
+  ctx.bezierCurveTo( bL*0.52, bW*0.5, bL*0.35, bW*0.9, bL*0.1, bW*1.2);
+  ctx.bezierCurveTo(-bL*0.1,  bW*1.4,-bL*0.44, bW*1.1,-bL*0.52,0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  ctx.lineWidth=s*5.5;
+  ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.lineTo(kneeBX,kneeBY);ctx.lineTo(footBX,footBY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.lineTo(kneeFX,kneeFY);ctx.lineTo(footFX,footFY);ctx.stroke();
+  ctx.lineWidth=s*7;
+  ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.quadraticCurveTo(cx+s*5,shoulderY+s*14,cx,shoulderY);ctx.stroke();
+  ctx.lineWidth=s*4;
+  ctx.beginPath();ctx.moveTo(cx,shoulderY);ctx.lineTo(cx+s*14,elbowBY);ctx.lineTo(handBX,handBY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,shoulderY);ctx.lineTo(elbowFX,elbowFY);ctx.lineTo(handFX,handFY);ctx.stroke();
+  ctx.lineWidth=s*4.5;
+  ctx.beginPath();ctx.moveTo(cx,shoulderY);ctx.lineTo(headCX,neckBot);ctx.stroke();
+  ctx.lineWidth=0;
+  ctx.beginPath();ctx.arc(headCX,headCY,headR,0,Math.PI*2);ctx.fill();
+}
+
+// ── DRAG ──
+let lastSurferBase = 0, lastSurferH = 0;
+function getTouch(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { y: (e.touches[0]||e.changedTouches[0]).clientY - rect.top };
+}
+function isHit(y) {
+  return showSurfer && y >= lastSurferBase - lastSurferH - 20 && y <= lastSurferBase + 20;
+}
+function onTouchStart(e) {
+  const { y } = getTouch(e);
+  if (isHit(y)) { isDragging=true; dragStartY=y; dragStartOff=personOffsetY; e.preventDefault(); }
+}
+function onTouchMove(e) {
+  if (!isDragging) return;
+  const { y } = getTouch(e);
+  personOffsetY = Math.max(-0.45, Math.min(0.45, dragStartOff + (y-dragStartY)/canvas.height));
+  e.preventDefault();
+}
+function onTouchEnd() { isDragging = false; }
+
+// ── TOGGLES ──
+function toggleSurfer() {
+  showSurfer = !showSurfer;
+  document.getElementById('btn-surfer').classList.toggle('active', showSurfer);
+}
+function toggleGrid() {
+  showGrid = !showGrid;
+  document.getElementById('btn-grid').classList.toggle('active', showGrid);
+}
+
+function updateSliderLabels() {
+  document.getElementById('v-mm').textContent     = document.getElementById('sl-mm').value;
+  document.getElementById('v-dist').textContent   = document.getElementById('sl-dist').value;
+  document.getElementById('v-height').textContent = document.getElementById('sl-height').value;
+}
+
+// ── MAIN LOOP ──
+function loop() {
+  const now = new Date();
+
+  let sunAlt = 45, sunAz = 180;
+  let sunPos = { x: 0.5, y: 0.5, visible: true };
+
+  if (lat !== null && lon !== null) {
+    const sp = getSunPosition(now, lat, lon);
+    sunAlt = sp.altitude;
+    sunAz  = sp.azimuth;
+    sunPos = getSunScreenPos(sunAz, sunAlt);
+    lastSunPos = sunPos;
+
+    // UI
+    document.getElementById('sun-azimuth').textContent  = 'AZ ' + Math.round(sunAz) + '°';
+    document.getElementById('sun-altitude').textContent = 'ALT ' + Math.round(sunAlt) + '°';
+  } else {
+    document.getElementById('sun-azimuth').textContent  = 'AZ —° (aguardando GPS)';
+    document.getElementById('sun-altitude').textContent = 'ALT —°';
+  }
+
+  if (hasCompass) {
+    document.getElementById('compass-val').textContent = Math.round(deviceHeading || 0) + '°';
+  }
+
+  draw(sunPos, sunAlt);
+  animFrame = requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
